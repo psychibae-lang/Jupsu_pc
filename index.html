@@ -347,6 +347,7 @@ tr:last-child td{border-bottom:none;}tr:hover td{background:#fafbff;}
     <button class="nav-tab" id="navPhone" onclick="switchTab('phone')">📞 전화번호변경</button>
     <button class="nav-tab" id="navDrugView" onclick="switchTab('drugview');loadDrugView()">💊 약물조회</button>
     <button class="nav-tab" id="navNotice" onclick="switchTab('notice');bpInit()" style="color:#2d7d46;font-weight:700;">📢 공지사항</button>
+    <button class="nav-tab" id="navLinks" onclick="switchTab('links');loadLinksTab()" style="color:#7c5cfc;font-weight:700;">🔗 링크관리</button>
   </div>
 </div>
 
@@ -4390,7 +4391,7 @@ async function confirmDelete() {
 </script>
 
 <!-- ══ 링크 탭 ══ -->
-<div id="tabLinks" class="container">
+<div id="tabLinks" class="container hidden">
 
   <!-- 저장된 링크 (상단) -->
   <div class="card">
@@ -4423,10 +4424,9 @@ async function confirmDelete() {
 </div>
 
 <script>
-// ══ 링크 탭 (Supabase) ═══════════════════════════════
+// ══ 링크 탭 (접수컴 전용 — app_config id='jupsu_links') ═══
 var _lkLoaded = false;
 var _lkList   = [];
-var LK_TABLE  = 'clinic_links'; // Supabase 테이블명
 
 async function loadLinksTab() {
   if (!SUPA_ANON || SUPA_ANON.length < 10) {
@@ -4434,17 +4434,33 @@ async function loadLinksTab() {
     return;
   }
   try {
-    var rows = await sbGet(LK_TABLE, { select: 'id,name,url', order: 'sort_order.asc,id.asc' });
-    _lkList = Array.isArray(rows) ? rows : [];
+    var resp = await fetch(SUPA_URL+'/rest/v1/app_config?id=eq.jupsu_links&select=data', {
+      headers: sbH()
+    });
+    var rows = await resp.json();
+    if (rows && rows[0] && rows[0].data && rows[0].data.links) {
+      _lkList = rows[0].data.links;
+    } else {
+      _lkList = [];
+    }
   } catch(e) {
     try {
-      var saved = localStorage.getItem('link_manager_v1');
-      _lkList = saved ? JSON.parse(saved).map(function(l,i){ return {id:null,name:l.name,url:l.url,sort_order:i}; }) : [];
+      var saved = localStorage.getItem('jupsu_links_v1');
+      _lkList = saved ? JSON.parse(saved) : [];
     } catch(e2) { _lkList = []; }
   }
   lkRender();
-  // 편집기는 데이터가 바뀔 때마다 갱신 (중복 행 방지를 위해 항상 재생성)
   lkPopulateEditor();
+}
+
+async function _lkSaveToDb(list) {
+  // app_config upsert
+  var resp = await fetch(SUPA_URL+'/rest/v1/app_config', {
+    method: 'POST',
+    headers: Object.assign({'Prefer':'resolution=merge-duplicates,return=minimal'}, sbH()),
+    body: JSON.stringify({id:'jupsu_links', data:{links:list}})
+  });
+  return resp.ok || resp.status===201 || resp.status===204;
 }
 
 var _lkDragging = false;
@@ -4464,7 +4480,6 @@ function lkDrop(ev, toIdx) {
   _lkDragIdx = -1;
   lkRender();
   lkPopulateEditor();
-  // 순서 자동 저장
   lkSave();
 }
 function lkDragEnd(ev) {
@@ -4540,32 +4555,14 @@ async function lkSave() {
   if (!newList.length) { showToast('⚠️ 이름과 URL을 입력해주세요'); return; }
 
   try {
-    // 기존 전체 삭제 후 재삽입 (간단한 upsert 전략)
-    var r = await fetch(SUPA_URL+'/rest/v1/'+LK_TABLE+'?id=gte.0', {
-      method:'DELETE',
-      headers: Object.assign({'Prefer':'return=minimal'}, sbH())
-    });
-    // 새로 insert
-    var r2 = await fetch(SUPA_URL+'/rest/v1/'+LK_TABLE, {
-      method:'POST',
-      headers: Object.assign({'Prefer':'return=minimal'}, sbH()),
-      body: JSON.stringify(newList)
-    });
-    if (r2.ok || r2.status===201) {
-      _lkList = newList;
-      lkRender();
-      lkPopulateEditor();
-      showToast('✅ 링크 저장 완료 ('+newList.length+'개)');
-    } else {
-      // fallback: localStorage
-      localStorage.setItem('link_manager_v1', JSON.stringify(newList.map(function(l){ return {name:l.name,url:l.url}; })));
-      _lkList = newList;
-      lkRender();
-      lkPopulateEditor();
-      showToast('✅ 로컬에 저장 완료 ('+newList.length+'개)');
-    }
+    var ok = await _lkSaveToDb(newList);
+    localStorage.setItem('jupsu_links_v1', JSON.stringify(newList));
+    _lkList = newList;
+    lkRender();
+    lkPopulateEditor();
+    showToast(ok ? '✅ 링크 저장 완료 ('+newList.length+'개)' : '✅ 로컬에 저장 완료');
   } catch(e) {
-    localStorage.setItem('link_manager_v1', JSON.stringify(newList.map(function(l){ return {name:l.name,url:l.url}; })));
+    localStorage.setItem('jupsu_links_v1', JSON.stringify(newList));
     _lkList = newList;
     lkRender();
     lkPopulateEditor();
@@ -4574,11 +4571,9 @@ async function lkSave() {
 }
 
 async function lkClearAll() {
-  if (!confirm('저장된 링크를 모두 삭제할까요?')) return;
-  try {
-    await fetch(SUPA_URL+'/rest/v1/'+LK_TABLE, { method:'DELETE', headers: Object.assign({'Prefer':'return=minimal'}, sbH()) });
-  } catch(e) {}
-  localStorage.removeItem('link_manager_v1');
+  if (!confirm('접수컴 링크를 모두 삭제할까요?')) return;
+  try { await _lkSaveToDb([]); } catch(e) {}
+  localStorage.removeItem('jupsu_links_v1');
   _lkList = [];
   lkRender();
   lkPopulateEditor();

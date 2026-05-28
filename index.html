@@ -351,7 +351,7 @@ tr:last-child td{border-bottom:none;}tr:hover td{background:#fafbff;}
 </div>
 
 <!-- ══ 예약 탭 ══ -->
-<div id="tabAppt" class="container hidden">
+<div id="tabAppt" class="hidden" style="max-width:1100px;margin:0 auto;padding:16px 12px;display:flex;flex-direction:column;gap:14px;">
   <div class="card" style="padding:14px 16px;">
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
       <div style="font-size:13px;font-weight:700;color:#333;">📅 예약 현황 (오늘~8일)</div>
@@ -2220,14 +2220,14 @@ function renderApptTable(){
     // 시간별 행
     var tableHtml='<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;">'
       +'<thead><tr style="background:#f7f8fc;">'
-      +'<th style="padding:9px 10px;text-align:left;border-bottom:1px solid #e0e4ef;min-width:55px;font-size:13px;">시간</th>'
-      +'<th style="padding:8px 10px;text-align:left;border-bottom:1px solid #e0e4ef;min-width:80px;">성함</th>'
-      +'<th style="padding:8px 10px;text-align:left;border-bottom:1px solid #e0e4ef;min-width:110px;">전화</th>'
-      +'<th style="padding:8px 10px;text-align:center;border-bottom:1px solid #e0e4ef;width:40px;">나이</th>'
-      +'<th style="padding:8px 10px;text-align:left;border-bottom:1px solid #e0e4ef;min-width:120px;">진료이유</th>'
-      +'<th style="padding:8px 10px;text-align:left;border-bottom:1px solid #e0e4ef;min-width:120px;">기타</th>'
-      +'<th style="padding:8px 10px;text-align:left;border-bottom:1px solid #e0e4ef;min-width:140px;">비고</th>'
-      +'<th style="padding:8px 10px;border-bottom:1px solid #e0e4ef;width:60px;"></th>'
+      +'<th style="padding:9px 10px;text-align:left;border-bottom:1px solid #e0e4ef;min-width:60px;font-size:13px;">시간</th>'
+      +'<th style="padding:8px 10px;text-align:left;border-bottom:1px solid #e0e4ef;min-width:90px;">성함</th>'
+      +'<th style="padding:8px 10px;text-align:left;border-bottom:1px solid #e0e4ef;min-width:120px;">전화</th>'
+      +'<th style="padding:8px 10px;text-align:center;border-bottom:1px solid #e0e4ef;width:50px;">나이</th>'
+      +'<th style="padding:8px 10px;text-align:left;border-bottom:1px solid #e0e4ef;min-width:140px;">진료이유</th>'
+      +'<th style="padding:8px 10px;text-align:left;border-bottom:1px solid #e0e4ef;min-width:140px;">기타</th>'
+      +'<th style="padding:8px 10px;text-align:left;border-bottom:1px solid #e0e4ef;min-width:160px;">비고(내부용)</th>'
+      +'<th style="padding:8px 10px;border-bottom:1px solid #e0e4ef;min-width:90px;white-space:nowrap;"></th>'
       +'</tr></thead><tbody>';
 
 
@@ -2287,7 +2287,7 @@ function renderApptRow(d6,time,data,isExtra){
     +'</td>'
     +'<td style="'+td+'"><input style="'+inp+'width:100%;min-width:110px;" value="'+(data?escQ(data.note||''):'')+'" placeholder="기타" class="appt-inp" data-field="note" onblur="saveApptRow(this)"></td>'
     +'<td style="'+td+'"><input style="'+inp+'width:100%;min-width:125px;" value="'+(data?escQ(data.memo||''):'')+'" placeholder="비고(내부용)" class="appt-inp" data-field="memo" onblur="saveApptRow(this)"></td>'
-    +'<td style="'+td+';white-space:nowrap;">'
+    +'<td style="'+td+';white-space:nowrap;min-width:90px;">'
     +'<button class="appt-save-btn" onclick="saveApptRowBtn(this)" style="font-size:11px;padding:3px 8px;background:#18a97a;color:#fff;border:none;border-radius:4px;cursor:pointer;margin-right:3px;">저장</button>'
     +'<button class="appt-del-btn" data-id="'+id+'" onclick="deleteAppt(this.dataset.id)" style="font-size:11px;padding:3px 8px;background:none;border:1px solid #fbb;color:#e53e3e;border-radius:4px;cursor:pointer;'+(id?'':'display:none;')+'" title="행 삭제">삭제</button>'
     +'<span class="appt-status" style="font-size:10px;margin-left:3px;"></span>'

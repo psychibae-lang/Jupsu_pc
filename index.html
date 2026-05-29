@@ -340,14 +340,14 @@ tr:last-child td{border-bottom:none;}tr:hover td{background:#fafbff;}
 </div>
 <div class="nav-wrap">
   <div class="nav-tabs-row active" id="grpJinryo" style="display:flex;">
+    <button class="nav-tab" id="navMessenger" onclick="switchTab('messenger')" style="color:#534AB7;font-weight:700;">💬 메신저</button>
     <button class="nav-tab active" id="navAppt" onclick="switchTab('appt');loadAppts()">📅 예약</button>
+    <button class="nav-tab" id="navNotice" onclick="switchTab('notice');bpInit()" style="color:#2d7d46;font-weight:700;">📢 공지사항</button>
     <button class="nav-tab" id="navSearch" onclick="switchTab('search');loadSearchTab()">🔍 접수조회</button>
     <button class="nav-tab" id="navProxy" onclick="switchTab('proxy')">📋 대리처방</button>
     <button class="nav-tab" id="navSelcare" onclick="switchTab('selcare')">⭐ 선택의료</button>
     <button class="nav-tab" id="navPhone" onclick="switchTab('phone')">📞 전화번호변경</button>
     <button class="nav-tab" id="navDrugView" onclick="switchTab('drugview');loadDrugView()">💊 약물조회</button>
-    <button class="nav-tab" id="navNotice" onclick="switchTab('notice');bpInit()" style="color:#2d7d46;font-weight:700;">📢 공지사항</button>
-    <button class="nav-tab" id="navMessenger" onclick="switchTab('messenger')" style="color:#534AB7;font-weight:700;">💬 메신저</button>
     <button class="nav-tab" id="navLinks" onclick="switchTab('links');loadLinksTab()" style="color:#7c5cfc;font-weight:700;">🔗 링크관리</button>
   </div>
 </div>

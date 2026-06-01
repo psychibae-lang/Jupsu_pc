@@ -4647,8 +4647,9 @@ async function loadDrugView() {
       return '<tr>'
         + '<td style="padding:8px 10px;border-bottom:1px solid #f0f2f8;"><span style="font-family:monospace;font-size:11px;background:#eef3fe;color:var(--accent);padding:2px 7px;border-radius:4px;border:1px solid #c7d9fb;">' + (d.drug_code||'') + '</span></td>'
         + '<td style="padding:8px 10px;border-bottom:1px solid #f0f2f8;font-weight:600;">' + (d.drug_name||'') + '</td>'
-        + '<td style="padding:8px 10px;border-bottom:1px solid #f0f2f8;text-align:center;">' + (d.dose||'') + '</td>'
-        + '<td style="padding:8px 10px;border-bottom:1px solid #f0f2f8;text-align:center;">' + (d.daily_freq||'') + '</td>'
+        + '<td style="padding:8px 10px;border-bottom:1px solid #f0f2f8;text-align:center;font-weight:600;color:var(--accent);">' + (function(dose,freq){var d=parseFloat(dose),f=parseFloat(freq);return (!isNaN(d)&&!isNaN(f)) ? (d*f) : ((dose||'')+(freq?'×'+freq:''));  })(d.dose,d.daily_freq) + '</td>'
+        + '<td style="padding:8px 10px;border-bottom:1px solid #f0f2f8;text-align:center;">' + (d.daily_freq||'')
+        + '</td>'
         + '<td style="padding:8px 10px;border-bottom:1px solid #f0f2f8;text-align:center;">' + (d.days||'') + '</td>'
         + '<td style="padding:8px 10px;border-bottom:1px solid #f0f2f8;text-align:center;">' + (d.method||'') + '</td>'
         + '</tr>';
@@ -4752,7 +4753,7 @@ async function dvSavePDF() {
           <tr>
             <th style="background:#f0f4ff;color:#555;font-size:10px;font-weight:700;padding:7px 10px;text-align:left;border-bottom:2px solid #c7d9fb;">약물코드</th>
             <th style="background:#f0f4ff;color:#555;font-size:10px;font-weight:700;padding:7px 10px;text-align:left;border-bottom:2px solid #c7d9fb;">약물명</th>
-            <th style="background:#f0f4ff;color:#555;font-size:10px;font-weight:700;padding:7px 10px;text-align:center;border-bottom:2px solid #c7d9fb;">용량</th>
+            <th style="background:#f0f4ff;color:#555;font-size:10px;font-weight:700;padding:7px 10px;text-align:center;border-bottom:2px solid #c7d9fb;">하루총용량</th>
             <th style="background:#f0f4ff;color:#555;font-size:10px;font-weight:700;padding:7px 10px;text-align:center;border-bottom:2px solid #c7d9fb;">일투</th>
             <th style="background:#f0f4ff;color:#555;font-size:10px;font-weight:700;padding:7px 10px;text-align:center;border-bottom:2px solid #c7d9fb;">일수</th>
             <th style="background:#f0f4ff;color:#555;font-size:10px;font-weight:700;padding:7px 10px;text-align:center;border-bottom:2px solid #c7d9fb;">용법</th>
@@ -5725,6 +5726,196 @@ function bpEsc(str){return String(str||'').replace(/&/g,'&amp;').replace(/</g,'&
 
     // 플로팅 팝업 표시
     showMainFloatPopup(fromId, fromLabel, msgText);
+  });
+})();
+</script>
+
+<!-- ══ 탭 영역 드래그 리사이즈 ══ -->
+<style>
+#tabResizeHandle {
+  position: fixed;
+  z-index: 9000;
+  pointer-events: none; /* 핸들 자체는 투명 컨테이너 */
+}
+.trh-e { /* 오른쪽 핸들 */
+  position: fixed;
+  width: 6px;
+  cursor: ew-resize;
+  background: transparent;
+  pointer-events: all;
+  z-index: 9001;
+  transition: background 0.15s;
+  border-radius: 3px;
+}
+.trh-s { /* 아래쪽 핸들 */
+  position: fixed;
+  height: 6px;
+  cursor: ns-resize;
+  background: transparent;
+  pointer-events: all;
+  z-index: 9001;
+  transition: background 0.15s;
+  border-radius: 3px;
+}
+.trh-se { /* 모서리 핸들 */
+  position: fixed;
+  width: 14px;
+  height: 14px;
+  cursor: nwse-resize;
+  background: transparent;
+  pointer-events: all;
+  z-index: 9002;
+  border-radius: 3px;
+}
+.trh-e:hover, .trh-e.active { background: rgba(79,142,247,0.35); }
+.trh-s:hover, .trh-s.active { background: rgba(79,142,247,0.35); }
+.trh-se:hover, .trh-se.active { background: rgba(79,142,247,0.5); border-radius: 0 0 4px 0; }
+/* 리사이즈 중 텍스트 선택 방지 */
+body.trh-resizing { user-select: none; }
+</style>
+
+<script>
+(function(){
+  // 탭별 크기 저장 (localStorage)
+  var STORE_KEY = 'tabResize_v1';
+  function loadSizes(){ try{ return JSON.parse(localStorage.getItem(STORE_KEY)||'{}'); }catch(e){return {};} }
+  function saveSizes(sizes){ try{ localStorage.setItem(STORE_KEY, JSON.stringify(sizes)); }catch(e){} }
+
+  // 현재 활성 탭 ID 추적
+  var _curTab = null;
+
+  // 핸들 요소 생성
+  var hE = document.createElement('div'); hE.className = 'trh-e';
+  var hS = document.createElement('div'); hS.className = 'trh-s';
+  var hSE= document.createElement('div'); hSE.className = 'trh-se';
+  document.body.appendChild(hE);
+  document.body.appendChild(hS);
+  document.body.appendChild(hSE);
+
+  function getActiveTabEl(){
+    if(!_curTab) return null;
+    var T = _curTab.charAt(0).toUpperCase() + _curTab.slice(1);
+    return document.getElementById('tab'+T);
+  }
+
+  function positionHandles(){
+    var el = getActiveTabEl();
+    // 메신저·접수조회 등 전체폭 탭은 리사이즈 제외
+    if(!el || el.classList.contains('hidden')){
+      hideHandles(); return;
+    }
+    // 전체폭(max-width:100%) 탭은 너비 핸들 숨김
+    var style = el.getAttribute('style')||'';
+    var noWidthHandle = (style.indexOf('max-width:100%') !== -1 || style.indexOf('max-width: 100%') !== -1);
+
+    var rect = el.getBoundingClientRect();
+    var scrollY = window.scrollY||0;
+
+    // 오른쪽 핸들 (고정 뷰포트 기준)
+    hE.style.top    = Math.max(rect.top, 60) + 'px';
+    hE.style.left   = (rect.right - 3) + 'px';
+    hE.style.height = (rect.height - 10) + 'px';
+    hE.style.display = noWidthHandle ? 'none' : 'block';
+
+    // 아래 핸들
+    hS.style.top    = (rect.bottom - 3) + 'px';
+    hS.style.left   = rect.left + 'px';
+    hS.style.width  = (rect.width - 10) + 'px';
+    hS.style.display = 'block';
+
+    // 모서리 핸들
+    hSE.style.top   = (rect.bottom - 7) + 'px';
+    hSE.style.left  = (rect.right - 7) + 'px';
+    hSE.style.display = noWidthHandle ? 'none' : 'block';
+  }
+
+  function hideHandles(){
+    hE.style.display = hS.style.display = hSE.style.display = 'none';
+  }
+
+  // 리사이즈 드래그
+  var _drag = null; // {type:'e'|'s'|'se', startX, startY, startW, startH, el, tabId}
+
+  function startDrag(e, type){
+    var el = getActiveTabEl();
+    if(!el) return;
+    e.preventDefault();
+    var cs = window.getComputedStyle(el);
+    var rect = el.getBoundingClientRect();
+    _drag = {
+      type: type,
+      startX: e.clientX, startY: e.clientY,
+      startW: rect.width, startH: rect.height,
+      el: el, tabId: _curTab
+    };
+    document.body.classList.add('trh-resizing');
+    hE.classList.add('active'); hS.classList.add('active'); hSE.classList.add('active');
+  }
+
+  hE.addEventListener('mousedown',  function(e){ startDrag(e,'e'); });
+  hS.addEventListener('mousedown',  function(e){ startDrag(e,'s'); });
+  hSE.addEventListener('mousedown', function(e){ startDrag(e,'se'); });
+
+  document.addEventListener('mousemove', function(e){
+    if(!_drag) return;
+    var dx = e.clientX - _drag.startX;
+    var dy = e.clientY - _drag.startY;
+    var el = _drag.el;
+    if(_drag.type === 'e' || _drag.type === 'se'){
+      var newW = Math.max(320, _drag.startW + dx);
+      el.style.maxWidth = newW + 'px';
+      el.style.width    = newW + 'px';
+    }
+    if(_drag.type === 's' || _drag.type === 'se'){
+      var newH = Math.max(200, _drag.startH + dy);
+      el.style.minHeight = newH + 'px';
+      el.style.height    = newH + 'px';
+    }
+    positionHandles();
+  });
+
+  document.addEventListener('mouseup', function(e){
+    if(!_drag) return;
+    // 크기 저장
+    var sizes = loadSizes();
+    var rect = _drag.el.getBoundingClientRect();
+    sizes[_drag.tabId] = { w: _drag.el.style.width, h: _drag.el.style.minHeight };
+    saveSizes(sizes);
+    _drag = null;
+    document.body.classList.remove('trh-resizing');
+    hE.classList.remove('active'); hS.classList.remove('active'); hSE.classList.remove('active');
+    positionHandles();
+  });
+
+  // switchTab 후킹
+  var _origSwitchTab = window.switchTab;
+  window.switchTab = function(tab){
+    _curTab = tab;
+    if(_origSwitchTab) _origSwitchTab.apply(this, arguments);
+    // 저장된 크기 복원
+    var sizes = loadSizes();
+    var T = tab.charAt(0).toUpperCase() + tab.slice(1);
+    var el = document.getElementById('tab'+T);
+    if(el && sizes[tab]){
+      if(sizes[tab].w) { el.style.maxWidth = sizes[tab].w; el.style.width = sizes[tab].w; }
+      if(sizes[tab].h) { el.style.minHeight = sizes[tab].h; el.style.height = sizes[tab].h; }
+    }
+    setTimeout(positionHandles, 30);
+  };
+
+  // 스크롤/리사이즈 시 핸들 위치 갱신
+  window.addEventListener('scroll', positionHandles, {passive:true});
+  window.addEventListener('resize', positionHandles, {passive:true});
+
+  // 초기 탭 감지 (active 클래스 있는 탭)
+  window.addEventListener('DOMContentLoaded', function(){
+    var TABS=['appt','search','proxy','selcare','phone','drugview','patient','drug','clin','sms','stats','links','notice','messenger'];
+    TABS.forEach(function(t){
+      var T=t.charAt(0).toUpperCase()+t.slice(1);
+      var el=document.getElementById('tab'+T);
+      if(el && !el.classList.contains('hidden')){ _curTab=t; }
+    });
+    positionHandles();
   });
 })();
 </script>

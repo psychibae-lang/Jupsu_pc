@@ -1819,7 +1819,7 @@ async function loadSpecialList(type){
           ?'<span style="color:#065f46;font-weight:600;">'+selDate+'</span>'
           :'<span style="color:#e53e3e;font-weight:600;">미수령</span>';
         var tr=document.createElement('tr');
-        tr.innerHTML='<td><span class="chart-tag" style="cursor:pointer;" onclick="goToPatient(\''+r.chart_no+'\')">'+r.chart_no+'</span></td>'
+        tr.innerHTML='<td><span class="chart-tag" style="cursor:default;">'+r.chart_no+'</span></td>'
           +'<td style="font-size:12px;">'+displayDate(fmt6(r.visit_date))+'</td>'
           +'<td style="font-size:12px;">'+(r.next_visit_date?displayDate(fmt6(r.next_visit_date)):'-')+'</td>'
           +'<td style="font-family:monospace;font-size:12px;">'+(pMap[r.chart_no]||'-')+'</td>'
@@ -1866,7 +1866,7 @@ function renderProxyTable(){
     var d6=caToD6(r.created_at);
     var chart=r.chart||'-';
     var tr=document.createElement('tr');
-    tr.innerHTML='<td><span class="chart-tag" style="cursor:pointer;" onclick="goToPatient(\''+chart+'\')">'+chart+'</span></td>'
+    tr.innerHTML='<td><span class="chart-tag" style="cursor:default;">'+chart+'</span></td>'
       +'<td style="font-size:13px;white-space:nowrap;">'+(r.visitor_name||'-')+'</td>'
       +'<td style="font-size:11px;color:#555;max-width:110px;">'+(r.relation||'-')+'</td>'
       +'<td style="font-size:13px;white-space:nowrap;">'+(r.patient_name||'-')+'</td>'

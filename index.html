@@ -4609,6 +4609,21 @@ function switchNavGroup(group) {
 // ═══════════════════════════════════════════════════════
 
 // ══ 약물조회 탭 ══════════════════════════════════════
+function getMethodDesc(code) {
+  var c = (code || '').toLowerCase().trim();
+  var map = {
+    'b1':'오전', 'b2':'점심', 'b3':'저녁', 'b4':'취침전',
+    'b12':'오전·점심', 'b13':'오전·저녁', 'b14':'오전·취침전',
+    'b23':'점심·저녁', 'b24':'점심·취침전', 'b34':'저녁·취침전',
+    'b123':'오전·점심·저녁', 'b124':'오전·점심·취침전',
+    'b134':'오전·저녁·취침전', 'b234':'점심·저녁·취침전',
+    'b1234':'오전·점심·저녁·취침전',
+    'tid':'1일 3회', 'bid':'1일 2회', 'qid':'1일 4회', 'qd':'1일 1회',
+    'prn':'필요시 복용', 'sos':'필요시 복용',
+  };
+  return map[c] || c;
+}
+
 async function loadDrugView() {
   var chartNo = (document.getElementById('dvChartNo').value || '').trim();
   if (!chartNo) { alert('챠트번호를 입력하세요.'); return; }
@@ -4648,10 +4663,10 @@ async function loadDrugView() {
         + '<td style="padding:8px 10px;border-bottom:1px solid #f0f2f8;"><span style="font-family:monospace;font-size:11px;background:#eef3fe;color:var(--accent);padding:2px 7px;border-radius:4px;border:1px solid #c7d9fb;">' + (d.drug_code||'') + '</span></td>'
         + '<td style="padding:8px 10px;border-bottom:1px solid #f0f2f8;font-weight:600;">' + (d.drug_name||'') + '</td>'
         + '<td style="padding:8px 10px;border-bottom:1px solid #f0f2f8;text-align:center;font-weight:600;color:var(--accent);">' + (function(dose,freq){var d=parseFloat(dose),f=parseFloat(freq);return (!isNaN(d)&&!isNaN(f)) ? (d*f) : ((dose||'')+(freq?'×'+freq:''));  })(d.dose,d.daily_freq) + '</td>'
-        + '<td style="padding:8px 10px;border-bottom:1px solid #f0f2f8;text-align:center;">' + (d.daily_freq||'')
-        + '</td>'
+        + '<td style="padding:8px 10px;border-bottom:1px solid #f0f2f8;text-align:center;">' + (d.daily_freq||'') + '</td>'
         + '<td style="padding:8px 10px;border-bottom:1px solid #f0f2f8;text-align:center;">' + (d.days||'') + '</td>'
         + '<td style="padding:8px 10px;border-bottom:1px solid #f0f2f8;text-align:center;">' + (d.method||'') + '</td>'
+        + '<td style="padding:8px 10px;border-bottom:1px solid #f0f2f8;font-size:11px;color:#6b7280;white-space:nowrap;">' + getMethodDesc(d.method) + '</td>'
         + '</tr>';
     }).join('');
     document.getElementById('dvResult').classList.remove('hidden');
@@ -4757,6 +4772,7 @@ async function dvSavePDF() {
             <th style="background:#f0f4ff;color:#555;font-size:10px;font-weight:700;padding:7px 10px;text-align:center;border-bottom:2px solid #c7d9fb;">일투</th>
             <th style="background:#f0f4ff;color:#555;font-size:10px;font-weight:700;padding:7px 10px;text-align:center;border-bottom:2px solid #c7d9fb;">일수</th>
             <th style="background:#f0f4ff;color:#555;font-size:10px;font-weight:700;padding:7px 10px;text-align:center;border-bottom:2px solid #c7d9fb;">용법</th>
+            <th style="background:#f0f4ff;color:#555;font-size:10px;font-weight:700;padding:7px 10px;text-align:left;border-bottom:2px solid #c7d9fb;">용법설명</th>
           </tr>
         </thead>
         <tbody id="dvTableBody"></tbody>

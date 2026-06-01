@@ -340,7 +340,7 @@ tr:last-child td{border-bottom:none;}tr:hover td{background:#fafbff;}
 </div>
 <div class="nav-wrap">
   <div class="nav-tabs-row active" id="grpJinryo" style="display:flex;">
-    <button class="nav-tab" id="navMessenger" onclick="openMessengerWindow()" style="color:#534AB7;font-weight:700;">💬 메신저</button>
+    <button class="nav-tab" id="navMessenger" onclick="switchTab('messenger')" style="color:#534AB7;font-weight:700;">💬 메신저</button>
     <button class="nav-tab active" id="navAppt" onclick="switchTab('appt');loadAppts()">📅 예약</button>
     <button class="nav-tab" id="navNotice" onclick="switchTab('notice');bpInit()" style="color:#2d7d46;font-weight:700;">📢 공지사항</button>
     <button class="nav-tab" id="navSearch" onclick="switchTab('search');loadSearchTab()">🔍 접수조회</button>
@@ -4764,8 +4764,13 @@ async function dvSavePDF() {
   </div>
 </div>
 <!-- ══ 메신저 탭 ══ -->
-<div id="tabMessenger" class="hidden" style="max-width:100%;margin:0;padding:0;height:calc(100vh - 120px);">
-  <iframe id="messengerFrame" src="messenger.html" style="width:100%;height:100%;border:none;display:block;" allowfullscreen></iframe>
+<div id="tabMessenger" class="hidden" style="max-width:100%;margin:0;padding:0;height:calc(100vh - 120px);display:flex;flex-direction:column;">
+  <div style="display:flex;justify-content:flex-end;align-items:center;padding:4px 10px;background:#f0efff;border-bottom:1px solid #d5d0f5;flex-shrink:0;">
+    <button onclick="openMessengerWindow()" style="display:inline-flex;align-items:center;gap:5px;background:#534AB7;color:#fff;border:none;border-radius:7px;padding:5px 13px;font-size:12px;font-weight:700;cursor:pointer;font-family:&#39;Noto Sans KR&#39;,sans-serif;">
+      ↗ 외부 창으로 열기
+    </button>
+  </div>
+  <iframe id="messengerFrame" src="messenger.html" style="width:100%;flex:1;border:none;display:block;" allowfullscreen></iframe>
 </div>
 
 <!-- ══ 공지사항 & 비품관리 탭 ══ -->

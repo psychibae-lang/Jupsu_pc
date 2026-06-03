@@ -4624,6 +4624,8 @@ function getMethodDesc(code) {
   return map[c] || c;
 }
 
+var _dvDrugCodeMap = {};
+
 async function loadDrugView() {
   var chartNo = (document.getElementById('dvChartNo').value || '').trim();
   if (!chartNo) { alert('챠트번호를 입력하세요.'); return; }
@@ -4636,6 +4638,23 @@ async function loadDrugView() {
       setStatus('dvStatus', 'error', '챠트 ' + chartNo + ' 의 약물 정보가 없습니다.');
       return;
     }
+
+    // drug_codes 테이블에서 image_url 조회
+    try {
+      var codes = drugs.map(function(d){ return d.drug_code; }).filter(Boolean);
+      if (codes.length > 0) {
+        var codeRes = await fetch(
+          SUPA_URL + '/rest/v1/drug_codes?select=code,image_url&code=' + encodeURIComponent('in.(' + codes.join(',') + ')'),
+          { headers: sbH() }
+        );
+        var codeRows = await codeRes.json();
+        _dvDrugCodeMap = {};
+        if (Array.isArray(codeRows)) {
+          codeRows.forEach(function(cr){ _dvDrugCodeMap[cr.code] = cr.image_url || ''; });
+        }
+      }
+    } catch(e2) { _dvDrugCodeMap = {}; }
+
     // 최신 updated_at/created_at
     var latestDrug = drugs.reduce(function(a,b){
       return (a.updated_at||a.created_at||'') > (b.updated_at||b.created_at||'') ? a : b;
@@ -4652,23 +4671,31 @@ async function loadDrugView() {
     }
     document.getElementById('dvChartLabel').textContent = chartNo;
     document.getElementById('dvDateLabel').textContent = dateLabel;
-    // also fill print area header
     var pc = document.getElementById('dvPrintChart');
     var pd = document.getElementById('dvPrintDate');
     if (pc) pc.textContent = chartNo;
     if (pd) pd.textContent = dateLabel;
+
     var tbody = document.getElementById('dvTableBody');
-    tbody.innerHTML = drugs.map(function(d) {
-      return '<tr>'
+    tbody.innerHTML = '';
+    drugs.forEach(function(d) {
+      var imgUrl = _dvDrugCodeMap[d.drug_code] || '';
+      var imgTd = imgUrl
+        ? '<td style="padding:5px 10px;border-bottom:1px solid #f0f2f8;text-align:center;vertical-align:middle;"><img src="' + imgUrl + '" crossorigin="anonymous" alt="' + (d.drug_name||'') + '" style="width:52px;height:52px;object-fit:contain;border-radius:6px;border:1px solid #e0e4ef;background:#f7f8fc;display:block;margin:0 auto;" onerror="this.style.display=\'none\'"></td>'
+        : '<td style="padding:5px 10px;border-bottom:1px solid #f0f2f8;text-align:center;color:#e0e4ef;">—</td>';
+      var totalDose = (function(dose,freq){var dv=parseFloat(dose),fv=parseFloat(freq);return (!isNaN(dv)&&!isNaN(fv)) ? (dv*fv) : ((dose||'')+(freq?'×'+freq:''));})(d.dose,d.daily_freq);
+      var tr = document.createElement('tr');
+      tr.innerHTML = ''
         + '<td style="padding:8px 10px;border-bottom:1px solid #f0f2f8;"><span style="font-family:monospace;font-size:11px;background:#eef3fe;color:var(--accent);padding:2px 7px;border-radius:4px;border:1px solid #c7d9fb;">' + (d.drug_code||'') + '</span></td>'
         + '<td style="padding:8px 10px;border-bottom:1px solid #f0f2f8;font-weight:600;">' + (d.drug_name||'') + '</td>'
-        + '<td style="padding:8px 10px;border-bottom:1px solid #f0f2f8;text-align:center;font-weight:600;color:var(--accent);">' + (function(dose,freq){var d=parseFloat(dose),f=parseFloat(freq);return (!isNaN(d)&&!isNaN(f)) ? (d*f) : ((dose||'')+(freq?'×'+freq:''));  })(d.dose,d.daily_freq) + '</td>'
+        + imgTd
+        + '<td style="padding:8px 10px;border-bottom:1px solid #f0f2f8;text-align:center;font-weight:600;color:var(--accent);">' + totalDose + '</td>'
         + '<td style="padding:8px 10px;border-bottom:1px solid #f0f2f8;text-align:center;">' + (d.daily_freq||'') + '</td>'
         + '<td style="padding:8px 10px;border-bottom:1px solid #f0f2f8;text-align:center;">' + (d.days||'') + '</td>'
         + '<td style="padding:8px 10px;border-bottom:1px solid #f0f2f8;text-align:center;">' + (d.method||'') + '</td>'
-        + '<td style="padding:8px 10px;border-bottom:1px solid #f0f2f8;font-size:11px;color:#6b7280;white-space:nowrap;">' + getMethodDesc(d.method) + '</td>'
-        + '</tr>';
-    }).join('');
+        + '<td style="padding:8px 10px;border-bottom:1px solid #f0f2f8;font-size:11px;color:#6b7280;white-space:nowrap;">' + getMethodDesc(d.method) + '</td>';
+      tbody.appendChild(tr);
+    });
     document.getElementById('dvResult').classList.remove('hidden');
   } catch(e) {
     setStatus('dvStatus', 'error', '오류: ' + e.message);
@@ -4681,7 +4708,13 @@ async function dvSaveImage() {
   if (typeof html2canvas === 'undefined') { alert('html2canvas 라이브러리 로드 중입니다. 잠시 후 다시 시도하세요.'); return; }
   try {
     showToast('🖼️ 이미지 생성 중...');
-    var canvas = await html2canvas(area, { scale: 2, backgroundColor: '#ffffff', useCORS: true });
+    // 이미지 로딩 완료 대기
+    var imgs = area.querySelectorAll('img');
+    await Promise.all(Array.from(imgs).map(function(img){
+      if (img.complete) return Promise.resolve();
+      return new Promise(function(res){ img.onload=res; img.onerror=res; });
+    }));
+    var canvas = await html2canvas(area, { scale: 2, backgroundColor: '#ffffff', useCORS: true, allowTaint: false });
     var link = document.createElement('a');
     var chartNo = (document.getElementById('dvChartNo').value || 'drug').trim();
     var dateStr = document.getElementById('dvDateLabel').textContent || '';
@@ -4702,7 +4735,13 @@ async function dvSavePDF() {
   }
   try {
     showToast('📄 PDF 생성 중...');
-    var canvas = await html2canvas(area, { scale: 2, backgroundColor: '#ffffff', useCORS: true });
+    // 이미지 로딩 완료 대기
+    var imgs = area.querySelectorAll('img');
+    await Promise.all(Array.from(imgs).map(function(img){
+      if (img.complete) return Promise.resolve();
+      return new Promise(function(res){ img.onload=res; img.onerror=res; });
+    }));
+    var canvas = await html2canvas(area, { scale: 2, backgroundColor: '#ffffff', useCORS: true, allowTaint: false });
     var imgData = canvas.toDataURL('image/png');
     var { jsPDF } = window.jspdf;
     var pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
@@ -4711,7 +4750,6 @@ async function dvSavePDF() {
     var margin = 15;
     var imgW = pageW - margin * 2;
     var imgH = (canvas.height / canvas.width) * imgW;
-    // if too tall, scale to fit
     if (imgH > pageH - margin * 2) {
       imgH = pageH - margin * 2;
       imgW = (canvas.width / canvas.height) * imgH;
@@ -4768,6 +4806,7 @@ async function dvSavePDF() {
           <tr>
             <th style="background:#f0f4ff;color:#555;font-size:10px;font-weight:700;padding:7px 10px;text-align:left;border-bottom:2px solid #c7d9fb;">약물코드</th>
             <th style="background:#f0f4ff;color:#555;font-size:10px;font-weight:700;padding:7px 10px;text-align:left;border-bottom:2px solid #c7d9fb;">약물명</th>
+            <th style="background:#f0f4ff;color:#555;font-size:10px;font-weight:700;padding:7px 10px;text-align:center;border-bottom:2px solid #c7d9fb;">이미지</th>
             <th style="background:#f0f4ff;color:#555;font-size:10px;font-weight:700;padding:7px 10px;text-align:center;border-bottom:2px solid #c7d9fb;">하루총용량</th>
             <th style="background:#f0f4ff;color:#555;font-size:10px;font-weight:700;padding:7px 10px;text-align:center;border-bottom:2px solid #c7d9fb;">일투</th>
             <th style="background:#f0f4ff;color:#555;font-size:10px;font-weight:700;padding:7px 10px;text-align:center;border-bottom:2px solid #c7d9fb;">일수</th>

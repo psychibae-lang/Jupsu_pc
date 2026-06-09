@@ -348,6 +348,7 @@ tr:last-child td{border-bottom:none;}tr:hover td{background:#fafbff;}
     <button class="nav-tab" id="navSelcare" onclick="switchTab('selcare')">⭐ 선택의료</button>
     <button class="nav-tab" id="navPhone" onclick="switchTab('phone')">📞 전화번호변경</button>
     <button class="nav-tab" id="navDrugView" onclick="switchTab('drugview');loadDrugView()">💊 약물조회</button>
+    <button class="nav-tab" id="navDrugdetail" onclick="switchTab('drugdetail');loadDrugDetailTab()">🔬 약물상세</button>
     <button class="nav-tab" id="navLinks" onclick="switchTab('links');loadLinksTab()" style="color:#7c5cfc;font-weight:700;">🔗 링크관리</button>
   </div>
 </div>
@@ -1089,8 +1090,7 @@ async function claudeCall(body){var r=await fetch(PROXY,{method:'POST',headers:{
 async function sheetPost(body){body._sheet_action=true;var r=await fetch(PROXY,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+ANON_KEY},body:JSON.stringify(body)});return r.json();}
 
 // ── 탭 ───────────────────────────────────────────────
-var TABS=['appt','search','proxy','selcare','phone','drugview','patient','drug','clin','sms','stats','links','notice','messenger'];
-// ── 약물 일괄 입력 ──────────────────────────────────
+var TABS=['appt','search','proxy','selcare','phone','drugview','drugdetail','patient','drug','clin','sms','stats','links','notice','messenger'];
 function applyBulkFill(){
   var dose=document.getElementById('bulkDose')?document.getElementById('bulkDose').value.trim():'';
   var freq=document.getElementById('bulkFreq')?document.getElementById('bulkFreq').value.trim():'';
@@ -4741,10 +4741,17 @@ async function loadDrugView() {
       var totalDose = (function(dose,freq){var dv=parseFloat(dose),fv=parseFloat(freq);return (!isNaN(dv)&&!isNaN(fv)) ? (dv*fv) : ((dose||'')+(freq?'×'+freq:''));})(d.dose,d.daily_freq);
       var tr = document.createElement('tr');
 
-      // 약물코드
+      // 약물코드 (클릭 시 약물상세 탭으로 이동)
       var tdCode = document.createElement('td');
       tdCode.style.cssText = 'padding:3px 10px;border-bottom:1px solid #f0f2f8;';
-      tdCode.innerHTML = '<span style="font-family:monospace;font-size:11px;background:#eef3fe;color:var(--accent);padding:2px 7px;border-radius:4px;border:1px solid #c7d9fb;">'+(d.drug_code||'')+'</span>';
+      var codeSpan = document.createElement('span');
+      codeSpan.style.cssText = 'font-family:monospace;font-size:11px;background:#eef3fe;color:var(--accent);padding:2px 7px;border-radius:4px;border:1px solid #c7d9fb;cursor:pointer;transition:all 0.15s;display:inline-block;';
+      codeSpan.title = '약물상세 보기';
+      codeSpan.textContent = d.drug_code || '';
+      codeSpan.onmouseover = function(){ this.style.background='#dbeafe'; this.style.borderColor='#93c5fd'; };
+      codeSpan.onmouseout  = function(){ this.style.background='#eef3fe'; this.style.borderColor='#c7d9fb'; };
+      (function(code){ codeSpan.onclick = function(){ openDrugDetailByCode(code); }; })(d.drug_code);
+      tdCode.appendChild(codeSpan);
       tr.appendChild(tdCode);
 
       // 약물명
@@ -4867,6 +4874,234 @@ async function dvSavePDF() {
     alert('PDF 저장 오류: ' + e.message);
   }
 }
+
+// ══ 약물상세 탭 ══════════════════════════════════════
+var _ddAllDrugs = [];
+var _ddCurrentDrug = null;
+var _ddLoaded = false;
+
+var _DD_CAT_STYLE_MAP = [
+  {keys:['항우울','ssri','우울','snri'],    label:'항우울제',   cls:'antidep', icon:'🧠'},
+  {keys:['항불안','불안','벤조'],           label:'항불안제',   cls:'anxio',   icon:'🌿'},
+  {keys:['adhd','콘서타','아토목신','집중'],label:'ADHD',       cls:'adhd',    icon:'⚡'},
+  {keys:['수면','자나','졸피','트리아'],    label:'수면제',     cls:'sleep',   icon:'🌙'},
+  {keys:['기분','리튬','발프','라모'],      label:'기분조절',   cls:'mood',    icon:'💜'},
+  {keys:['항정신','비정형','정신병'],       label:'항정신병약', cls:'other',   icon:'🧩'},
+  {keys:['치매','알츠'],                    label:'치매치료제', cls:'mood',    icon:'🔵'},
+  {keys:['위장','소화','위'],               label:'소화기약',   cls:'other',   icon:'🟢'},
+  {keys:['뇌혈','혈관','혈류'],            label:'뇌혈관제',   cls:'other',   icon:'🔴'},
+];
+
+function _ddGetCat(dbCategory, fallbackName) {
+  var raw = (dbCategory || '').trim();
+  if (raw) {
+    var rl = raw.toLowerCase();
+    for (var s of _DD_CAT_STYLE_MAP) {
+      if (s.keys.some(function(k){ return rl.includes(k); })) {
+        return {label: raw, cls: s.cls, icon: s.icon};
+      }
+    }
+    return {label: raw, cls: 'other', icon: '💊'};
+  }
+  var n = (fallbackName || '').toLowerCase();
+  for (var s2 of _DD_CAT_STYLE_MAP) {
+    if (s2.keys.some(function(k){ return n.includes(k); })) {
+      return {label: s2.label, cls: s2.cls, icon: s2.icon};
+    }
+  }
+  return {label:'기타', cls:'other', icon:'💊'};
+}
+
+async function loadDrugDetailTab() {
+  if (_ddLoaded) return;
+  var listEl = document.getElementById('ddDrugList');
+  if (listEl) listEl.innerHTML = '<div style="text-align:center;padding:30px;color:#6b7280;"><div style="width:24px;height:24px;border:2px solid #c7d9fb;border-top-color:#4f8ef7;border-radius:50%;animation:spin 0.7s linear infinite;margin:0 auto 10px;"></div>약물 목록 불러오는 중...</div>';
+  try {
+    var r = await fetch(SUPA_URL + '/rest/v1/drug_codes?select=*&limit=500&order=name.asc', { headers: sbH() });
+    var data = await r.json();
+    if (!Array.isArray(data)) throw new Error(data?.message || '로드 실패');
+    _ddAllDrugs = data;
+    _ddLoaded = true;
+    _ddRenderList(_ddAllDrugs);
+  } catch(e) {
+    if (listEl) listEl.innerHTML = '<div style="text-align:center;padding:30px;color:#e53e3e;">약물 목록을 불러올 수 없습니다.<br><small>' + e.message + '</small></div>';
+  }
+}
+
+function _ddRenderList(drugs) {
+  var listEl = document.getElementById('ddDrugList');
+  if (!listEl) return;
+  if (!drugs.length) { listEl.innerHTML = '<div style="text-align:center;padding:30px;color:#6b7280;">검색 결과가 없습니다.</div>'; return; }
+  listEl.innerHTML = drugs.map(function(d, i) {
+    var cat = _ddGetCat(d.category, d.name);
+    var hasImg = !!d.image_url;
+    var iconHtml = hasImg
+      ? '<img src="'+d.image_url+'" alt="" style="width:100%;height:100%;object-fit:contain;" onerror="this.parentNode.innerHTML=\''+cat.icon+'\'">'
+      : cat.icon;
+    return '<div class="dd-drug-item" onclick="ddOpenDrug('+i+','+JSON.stringify(drugs.map(function(x){return x.code;})).replace(/"/g,'&quot;')+')" data-idx="'+i+'">'
+      + '<div class="dd-drug-icon icon-'+cat.cls+(hasImg?' dd-has-img':'')+'" style="background:'+(hasImg?'#fff':'')+'">'+iconHtml+'</div>'
+      + '<div style="flex:1;min-width:0;">'
+      +   '<div style="font-size:13px;font-weight:500;color:#1a1d2e;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+( d.name||d.code)+'</div>'
+      +   '<div style="font-size:11px;color:#adb5bd;font-family:monospace;">'+d.code+'</div>'
+      + '</div>'
+      + '<span class="cat-badge cat-'+cat.cls+'" style="font-size:10px;">'+cat.label+'</span>'
+      + '</div>';
+  }).join('');
+}
+
+// 코드 배열에서 인덱스 찾아 열기 (약물조회에서 클릭 시 사용)
+function ddOpenDrug(idx, codeArr) {
+  var drugs = codeArr ? _ddAllDrugs.filter(function(d){ return codeArr.indexOf(d.code) >= 0; }) : _ddAllDrugs;
+  var d = drugs[idx] || _ddAllDrugs[idx];
+  if (!d) return;
+  _ddCurrentDrug = d;
+  _ddShowDetail(d);
+}
+
+function _ddShowDetail(d) {
+  var cat = _ddGetCat(d.category, d.name);
+  var detailEl = document.getElementById('ddDetail');
+  var listWrap = document.getElementById('ddListWrap');
+  if (detailEl) detailEl.classList.remove('hidden');
+  if (listWrap) listWrap.classList.add('hidden');
+
+  var el = function(id){ return document.getElementById(id); };
+  if (el('ddDetailIcon')) { el('ddDetailIcon').textContent = cat.icon; el('ddDetailIcon').className = 'dd-detail-icon icon-'+cat.cls; }
+  if (d.image_url) {
+    if (el('ddDetailImgWrap')) el('ddDetailImgWrap').style.display='block';
+    if (el('ddDetailIcon')) el('ddDetailIcon').style.display='none';
+    if (el('ddDetailImg')) { el('ddDetailImg').src=d.image_url; el('ddDetailImg').onerror=function(){ el('ddDetailImgWrap').style.display='none'; el('ddDetailIcon').style.display='flex'; }; }
+  } else {
+    if (el('ddDetailImgWrap')) el('ddDetailImgWrap').style.display='none';
+    if (el('ddDetailIcon')) el('ddDetailIcon').style.display='flex';
+  }
+  if (el('ddDetailName')) el('ddDetailName').textContent = d.name || d.code;
+  if (el('ddDetailCode')) el('ddDetailCode').textContent = '코드: ' + (d.code||'-') + ' · ' + cat.label;
+
+  _ddSwitchTab('ddEffect');
+  if (d.effect || d.side_effects || d.mechanism) {
+    _ddRenderInfo(d);
+  } else {
+    _ddLoadAiInfo(d);
+  }
+}
+
+function _ddSwitchTab(activeId) {
+  ['ddEffect','ddSide','ddMech','ddInteract','ddCaution','ddLinks'].forEach(function(id){
+    var el = document.getElementById(id);
+    var btn = document.getElementById('ddBtn_'+id);
+    if (el) el.classList.toggle('dd-pane-active', id===activeId);
+    if (btn) btn.classList.toggle('dd-tab-active', id===activeId);
+  });
+}
+
+function _ddParseBadges(text) {
+  if (!text) return [];
+  return text.split(/[,\/\n]/).map(function(s){ return s.trim(); }).filter(Boolean).slice(0,8);
+}
+
+function _ddRenderInfo(d) {
+  function el(id){ return document.getElementById(id); }
+  if (el('ddEffect')) el('ddEffect').innerHTML =
+    '<div class="dd-info-card"><div class="dd-info-label">주요 효능 및 적응증</div><div class="dd-info-text">'+(d.effect||'정보 없음')+'</div></div>';
+
+  var sideArr = _ddParseBadges(d.side_effects);
+  if (el('ddSide')) el('ddSide').innerHTML =
+    '<div class="dd-info-card"><div class="dd-info-label">주의해야 할 부작용</div>'
+    +'<div class="dd-badge-list">'+sideArr.map(function(s,i){ return '<span class="badge '+(i<2?'badge-danger':i<4?'badge-warn':'badge-info')+'">'+s+'</span>'; }).join('')+'</div></div>'
+    +'<div class="dd-info-card" style="margin-top:0;"><div class="dd-info-label">상세 설명</div><div class="dd-info-text">'+(d.side_effects_detail||d.side_effects||'정보 없음')+'</div></div>';
+
+  if (el('ddMech')) el('ddMech').innerHTML =
+    '<div class="dd-info-card"><div class="dd-info-label">작용 기전</div><div class="dd-info-text">'+(d.mechanism||'정보 없음')+'</div></div>';
+
+  if (el('ddInteract')) el('ddInteract').innerHTML = d.interactions
+    ? '<div class="dd-info-card"><div class="dd-info-label">상호작용 주의 약물/물질</div><div class="dd-info-text">'+d.interactions+'</div></div>'
+    : '<div style="text-align:center;padding:30px;color:#6b7280;"><div style="font-size:32px;margin-bottom:8px;">ℹ️</div>상호작용 정보가 없습니다.</div>';
+
+  if (el('ddCaution')) el('ddCaution').innerHTML =
+    '<div class="dd-info-card"><div class="dd-info-label">복용 주의사항</div><div class="dd-info-text">'+(d.precautions||'담당 의사의 지시에 따라 복용하세요.')+'</div></div>'
+    +'<div class="dd-info-card" style="background:#fff8f0;margin-top:0;"><div class="dd-info-label" style="color:#b45309;">⚠️ 중요 안내</div><div class="dd-info-text" style="font-size:13px;">이 정보는 참고용입니다. 복용량 변경이나 중단은 반드시 담당 의사와 상의하세요.</div></div>';
+
+  var healthLink = d.health_kr_link, ysLink = d.ysarang_link;
+  if (el('ddLinks')) el('ddLinks').innerHTML =
+    '<div class="dd-info-card">'
+    +'<div class="dd-info-label">외부 참고 사이트</div>'
+    +(healthLink||ysLink
+      ? (healthLink ? '<a href="'+healthLink+'" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:12px;padding:14px 16px;background:#fff;border:1.5px solid #3b82f6;border-radius:12px;text-decoration:none;margin-bottom:8px;"><div style="font-size:20px;width:40px;text-align:center;">💊</div><div><div style="font-size:13px;font-weight:600;color:#1e40af;">약학정보원</div><div style="font-size:11px;color:#6b7280;">의약품 상세 정보</div></div></a>' : '')
+        +(ysLink ? '<a href="'+ysLink+'" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:12px;padding:14px 16px;background:#fff;border:1.5px solid #10b981;border-radius:12px;text-decoration:none;"><div style="font-size:20px;width:40px;text-align:center;">🏥</div><div><div style="font-size:13px;font-weight:600;color:#065f46;">의사랑</div><div style="font-size:11px;color:#6b7280;">처방 및 임상 정보</div></div></a>' : '')
+      : '<div style="text-align:center;padding:20px;color:#adb5bd;font-size:13px;">등록된 외부 링크가 없습니다.</div>')
+    +'</div>';
+}
+
+async function _ddLoadAiInfo(d) {
+  var loading = '<div style="text-align:center;padding:40px 20px;"><div class="spinner" style="width:36px;height:36px;border:3px solid #e0e4ef;border-top-color:#4f8ef7;border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 12px;"></div><div style="font-size:13px;color:#6b7280;">AI가 약물 정보를 분석 중입니다...</div></div>';
+  ['ddEffect','ddSide','ddMech','ddInteract','ddCaution'].forEach(function(id){
+    var el = document.getElementById(id);
+    if (el) el.innerHTML = loading;
+  });
+
+  var CLAUDE_PROXY = SUPA_URL + '/functions/v1/claude-proxy';
+  try {
+    var prompt = '당신은 정신건강의학과 전문 약사입니다. 약물 "'+( d.name||d.code)+'"에 대해 환자가 이해하기 쉬운 한국어로 다음 JSON 형식으로만 답하세요 (마크다운 없이):\n{"effect":"효능 및 적응증 2-3문장","side_effects":"주요 부작용들을 쉼표로 구분 (5-7개)","side_effects_detail":"부작용 상세 설명 2-3문장","mechanism":"작용 기전 2-3문장","interactions":"상호작용 설명 2-3문장","precautions":"복용 주의사항 2-3문장","category":"약물 분류"}';
+    var res = await fetch(CLAUDE_PROXY, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json','Authorization':'Bearer '+ANON_KEY},
+      body: JSON.stringify({ model:'claude-sonnet-4-5', max_tokens:1000, messages:[{role:'user',content:prompt}] })
+    });
+    var rawText = await res.text();
+    var json; try { json = JSON.parse(rawText); } catch(e) { throw new Error('응답 파싱 실패'); }
+    var text = (json.content && json.content[0] && json.content[0].text) || json.text || json.result || rawText;
+    var clean = text.replace(/```json|```/g,'').trim();
+    var info = {}; try { info = JSON.parse(clean); } catch(e) { info = {effect: text}; }
+    var merged = Object.assign({}, d, info, {ai_generated:true});
+    _ddCurrentDrug = merged;
+    _ddRenderInfo(merged);
+  } catch(e) {
+    var errMsg = '<div style="text-align:center;padding:30px;color:#e53e3e;">AI 정보를 불러올 수 없습니다.<br><small>'+e.message+'</small></div>';
+    ['ddEffect','ddSide','ddMech','ddInteract','ddCaution'].forEach(function(id){ var el=document.getElementById(id); if(el) el.innerHTML=errMsg; });
+  }
+}
+
+// 약물조회에서 코드 클릭 → 약물상세 탭으로 이동 후 검색
+async function openDrugDetailByCode(code) {
+  if (!code) return;
+  switchTab('drugdetail');
+  // 탭 버튼 active 표시
+  var nb = document.getElementById('navDrugdetail');
+  if (nb) { document.querySelectorAll('.nav-tab').forEach(function(b){ b.classList.remove('active'); }); nb.classList.add('active'); }
+  // 검색 입력란에 코드 넣기
+  var si = document.getElementById('ddSearchInput');
+  if (si) { si.value = code; ddOnSearch(); }
+  // 데이터 로드 후 해당 약물 자동 열기
+  if (!_ddLoaded) await loadDrugDetailTab();
+  // 검색 후 첫 번째 결과 자동 클릭
+  var d = _ddAllDrugs.find(function(x){ return x.code === code || (x.code||'').toLowerCase() === (code||'').toLowerCase(); });
+  if (d) {
+    _ddCurrentDrug = d;
+    _ddShowDetail(d);
+  } else {
+    // 코드로 없으면 검색어 유지
+    ddOnSearch();
+  }
+}
+
+function ddOnSearch() {
+  var q = (document.getElementById('ddSearchInput') && document.getElementById('ddSearchInput').value || '').trim();
+  var filtered = q ? _ddAllDrugs.filter(function(d){ return (d.name||'').includes(q)||(d.code||'').includes(q)||(d.category||'').includes(q); }) : _ddAllDrugs;
+  _ddRenderList(filtered);
+  // 목록 보이기, 상세 숨기기
+  var listWrap = document.getElementById('ddListWrap');
+  var detail = document.getElementById('ddDetail');
+  if (listWrap) listWrap.classList.remove('hidden');
+  if (detail) detail.classList.add('hidden');
+}
+
+function ddBackToList() {
+  var listWrap = document.getElementById('ddListWrap');
+  var detail = document.getElementById('ddDetail');
+  if (listWrap) listWrap.classList.remove('hidden');
+  if (detail) detail.classList.add('hidden');
+}
 </script>
 
 <!-- ══ 약물조회 탭 ══ -->
@@ -4953,6 +5188,90 @@ async function dvSavePDF() {
         </thead>
         <tbody id="dvTableBody"></tbody>
       </table>
+    </div>
+  </div>
+</div>
+<!-- ══ 약물상세 탭 ══ -->
+<div id="tabDrugdetail" class="hidden" style="max-width:800px;margin:0 auto;padding:0;display:flex;flex-direction:column;min-height:calc(100vh - 120px);">
+
+  <!-- 스타일 (이 탭 전용 클래스) -->
+  <style>
+  .dd-drug-item{display:flex;align-items:center;gap:12px;padding:12px 16px;background:#fff;border:1px solid #e0e4ef;border-radius:12px;margin-bottom:8px;cursor:pointer;transition:all 0.15s;}
+  .dd-drug-item:hover{border-color:#4f8ef7;background:#eef3fe;}
+  .dd-drug-icon{width:54px;height:40px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;overflow:hidden;}
+  .dd-has-img{background:#fff!important;}
+  .dd-info-card{background:#f7f8fc;border-radius:12px;padding:14px;margin-bottom:10px;}
+  .dd-info-label{font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:0.07em;margin-bottom:8px;}
+  .dd-info-text{font-size:14px;color:#1a1d2e;line-height:1.7;}
+  .dd-badge-list{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px;}
+  .dd-tab-btn{padding:10px 12px;font-size:13px;font-weight:500;color:#6b7280;border:none;background:none;cursor:pointer;white-space:nowrap;border-bottom:2px solid transparent;font-family:'Noto Sans KR',sans-serif;transition:all 0.15s;}
+  .dd-tab-btn.dd-tab-active{color:#4f8ef7;border-bottom-color:#4f8ef7;}
+  .dd-pane{display:none;padding:16px;}
+  .dd-pane.dd-pane-active{display:block;}
+  .dd-detail-icon{width:56px;height:56px;border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:28px;margin-bottom:12px;}
+  </style>
+
+  <!-- 검색 영역 -->
+  <div style="padding:12px 16px 0;background:#fff;border-bottom:1px solid #e0e4ef;">
+    <div style="display:flex;align-items:center;gap:8px;background:#f7f8fc;border:1.5px solid #e0e4ef;border-radius:10px;padding:9px 14px;transition:border-color 0.2s;"
+         onfocusin="this.style.borderColor='#4f8ef7'" onfocusout="this.style.borderColor='#e0e4ef'">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#adb5bd" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+      <input id="ddSearchInput" type="text" placeholder="약물명·코드 검색 (예: 자나팜, 뉴프람)" oninput="ddOnSearch()"
+        style="flex:1;background:none;border:none;outline:none;font-family:'Noto Sans KR',sans-serif;font-size:13px;color:#1a1d2e;">
+      <button onclick="document.getElementById('ddSearchInput').value='';ddOnSearch();"
+        style="background:none;border:none;cursor:pointer;color:#adb5bd;font-size:15px;padding:0 2px;">✕</button>
+    </div>
+    <div style="font-size:11px;color:#adb5bd;padding:6px 2px 8px;">💊 약물조회 탭에서 약물코드를 클릭하면 자동으로 열립니다</div>
+  </div>
+
+  <!-- 목록 영역 -->
+  <div id="ddListWrap" style="flex:1;overflow-y:auto;padding:12px 16px;">
+    <div id="ddDrugList">
+      <div style="text-align:center;padding:40px;color:#6b7280;">약물상세 탭을 처음 열면 약물 목록이 로드됩니다.</div>
+    </div>
+  </div>
+
+  <!-- 상세 영역 (처음엔 숨김) -->
+  <div id="ddDetail" class="hidden" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;">
+    <!-- 뒤로 버튼 -->
+    <div style="padding:10px 16px;border-bottom:1px solid #e0e4ef;background:#fff;">
+      <button onclick="ddBackToList()" style="background:none;border:none;cursor:pointer;color:#6b7280;display:inline-flex;align-items:center;gap:5px;font-size:13px;font-family:'Noto Sans KR',sans-serif;">
+        <span style="width:26px;height:26px;background:#f0f2f8;border-radius:7px;display:inline-flex;align-items:center;justify-content:center;">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 12H5"/><path d="m12 5-7 7 7 7"/></svg>
+        </span>
+        목록으로
+      </button>
+    </div>
+
+    <!-- 약물 헤더 -->
+    <div style="padding:16px 20px 12px;background:linear-gradient(135deg,#f8f9ff 0%,#eef2ff 100%);border-bottom:1px solid #e0e4ef;">
+      <div id="ddDetailIcon" class="dd-detail-icon">💊</div>
+      <div id="ddDetailImgWrap" style="display:none;margin-bottom:12px;">
+        <img id="ddDetailImg" src="" alt="" style="width:100%;max-height:160px;object-fit:contain;border-radius:10px;border:1px solid #e0e4ef;background:#fafafa;padding:6px;">
+      </div>
+      <div id="ddDetailName" style="font-size:19px;font-weight:700;color:#1a1d2e;margin-bottom:4px;line-height:1.3;"></div>
+      <div id="ddDetailCode" style="font-size:12px;color:#6b7280;font-family:monospace;margin-bottom:8px;"></div>
+      <span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;background:#d1fae5;color:#065f46;padding:3px 10px;border-radius:20px;font-weight:600;">✨ AI 정보 보완</span>
+    </div>
+
+    <!-- 탭 네비 -->
+    <div style="display:flex;padding:0 12px;gap:2px;border-bottom:1px solid #e0e4ef;background:#fff;overflow-x:auto;scrollbar-width:none;">
+      <button class="dd-tab-btn dd-tab-active" id="ddBtn_ddEffect" onclick="_ddSwitchTab('ddEffect')">효능/효과</button>
+      <button class="dd-tab-btn" id="ddBtn_ddSide" onclick="_ddSwitchTab('ddSide')">부작용</button>
+      <button class="dd-tab-btn" id="ddBtn_ddMech" onclick="_ddSwitchTab('ddMech')">기전</button>
+      <button class="dd-tab-btn" id="ddBtn_ddInteract" onclick="_ddSwitchTab('ddInteract')">상호작용</button>
+      <button class="dd-tab-btn" id="ddBtn_ddCaution" onclick="_ddSwitchTab('ddCaution')">주의사항</button>
+      <button class="dd-tab-btn" id="ddBtn_ddLinks" onclick="_ddSwitchTab('ddLinks')">🔗 외부사이트</button>
+    </div>
+
+    <!-- 탭 내용 -->
+    <div style="flex:1;overflow-y:auto;padding-bottom:40px;">
+      <div id="ddEffect" class="dd-pane dd-pane-active"></div>
+      <div id="ddSide" class="dd-pane"></div>
+      <div id="ddMech" class="dd-pane"></div>
+      <div id="ddInteract" class="dd-pane"></div>
+      <div id="ddCaution" class="dd-pane"></div>
+      <div id="ddLinks" class="dd-pane"></div>
     </div>
   </div>
 </div>
@@ -6101,7 +6420,7 @@ body.trh-resizing { user-select: none; }
 
   // 초기 탭 감지 (active 클래스 있는 탭)
   window.addEventListener('DOMContentLoaded', function(){
-    var TABS=['appt','search','proxy','selcare','phone','drugview','patient','drug','clin','sms','stats','links','notice','messenger'];
+    var TABS=['appt','search','proxy','selcare','phone','drugview','drugdetail','patient','drug','clin','sms','stats','links','notice','messenger'];
     TABS.forEach(function(t){
       var T=t.charAt(0).toUpperCase()+t.slice(1);
       var el=document.getElementById('tab'+T);

@@ -5282,7 +5282,7 @@ function ddBackToList() {
       ↗ 외부 창으로 열기
     </button>
   </div>
-  <iframe id="messengerFrame" src="messenger.html" style="width:100%;flex:1;border:none;display:block;" allowfullscreen></iframe>
+  <iframe id="messengerFrame" src="messenger_h.html" style="width:100%;flex:1;border:none;display:block;" allowfullscreen></iframe>
 </div>
 
 <!-- ══ 공지사항 & 비품관리 탭 ══ -->
@@ -6216,7 +6216,7 @@ function bpEsc(str){return String(str||'').replace(/&/g,'&amp;').replace(/</g,'&
     const left = Math.round((screen.width - w) / 2);
     const top  = Math.round((screen.height - h) / 2);
     _messengerWin = window.open(
-      'messenger.html',
+      'messenger_h.html',
       'hangang_messenger',
       `width=${w},height=${h},left=${left},top=${top},resizable=yes,scrollbars=no`
     );

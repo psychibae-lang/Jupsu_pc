@@ -1266,7 +1266,7 @@ async function finishAll(){
       copy_text:r.copy?r.copy(ds,st.name):'',completed_at:now.toISOString()};
   });
   const{data:okSave,error:saveErr}=await sb.rpc('submit_results',{p_id:st.sessionId,p_rows:inserts});
-  if(saveErr||okSave===false){alert('결과 저장에 실패했습니다. 직원에게 알려주세요.');}
+  if(saveErr||okSave===false){alert('결과 저장에 실패했습니다. 직원에게 알려주세요.\n[오류] '+(saveErr?(saveErr.message||'')+' '+(saveErr.code||'')+' '+(saveErr.details||''):'함수가 false를 반환(링크 만료/이미 완료/없는 세션)'));}
   showResultScreen(results);
 }
 

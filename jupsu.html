@@ -588,7 +588,6 @@ tr:last-child td{border-bottom:none;}tr:hover td{background:#fafbff;}
     <div id="modal-body" style="padding:16px 20px;overflow-y:auto;max-height:65vh;"></div>
     <div style="padding:12px 20px;border-top:1px solid #eee;display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;">
       <button onclick="openEditModal()" style="background:#d97706;color:#fff;border:none;border-radius:8px;padding:9px 16px;font-size:13px;cursor:pointer;font-weight:700;">✏️ 수정</button>
-      <button onclick="printModalPDF()" style="background:#16a34a;color:#fff;border:none;border-radius:8px;padding:9px 18px;font-size:13px;cursor:pointer;font-weight:700;">🖨️ PDF</button>
       <button onclick="closeModal()" class="btn btn-outline" style="font-size:13px;">닫기</button>
     </div>
   </div>
@@ -3453,6 +3452,7 @@ function showToast(msg) {
 // ═══════════════════════════════════════
 // 대리처방 & 초진 통합 로직
 // ═══════════════════════════════════════
+function addrHead(a){return String(a||'').trim().slice(0,7);}
 const SHEET_WEB_APP_URL2 = "https://script.google.com/macros/s/AKfycbzFR4dqmK32DDSHf8s6D0IJzmOFJYakSyBFOCx5MXrcb-zA5XMs9Dk3cBKNkzBCzOc/exec";
 
 // ─ 라디오 아이템 스타일 주입 ─
@@ -3708,7 +3708,7 @@ async function cj2Submit(){
       filename
     });
     // ── 구글 시트 전송 ──
-    await fetch(SHEET_WEB_APP_URL2,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},body:JSON.stringify({sheet:'초진',row:[dr2FullDate(),chart,n,i1,i2,ph,ad,a1?'동의':'미동의',a2?'동의':'미동의',a3?'동의':'미동의',a4?'동의':'미동의',a5?'동의':'미동의',a6?'확인':'미확인',sigUrl||'(드라이브링크)',filename],signature:sigDataUrl})});
+    await fetch(SHEET_WEB_APP_URL2,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},body:JSON.stringify({sheet:'초진',row:[dr2FullDate(),chart,n,i1,'',ph,addrHead(ad),a1?'동의':'미동의',a2?'동의':'미동의',a3?'동의':'미동의',a4?'동의':'미동의',a5?'동의':'미동의',a6?'확인':'미확인',sigUrl||'(드라이브링크)',filename],signature:sigDataUrl})});
     toast('✅ 저장 완료!');
   }catch(e){toast('📄 PDF 저장 완료 (네트워크 오류)'); console.error(e);}
 }
